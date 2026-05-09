@@ -1,0 +1,13 @@
+[project]
+name = "generalchat-server"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.136.1",
+    "httpx>=0.28.1",
+    "platformdirs>=4.9.6",
+    "pydantic-settings>=2.14.0",
+    "uvicorn[standard]>=0.46.0",
+]

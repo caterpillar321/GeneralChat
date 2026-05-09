@@ -1,0 +1,35 @@
+# Node / Electron / Vite
+node_modules/
+dist/
+out/
+build/
+*.local
+.DS_Store
+.vite/
+.cache/
+
+# Python / uv
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+.python-version
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+
+# Editor / OS
+.vscode/
+.idea/
+*.swp
+Thumbs.db
+
+# App data / logs
+*.log
+logs/
+data/
+attachments/
+*.sqlite
+*.sqlite-*
+*.db
