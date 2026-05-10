@@ -16,9 +16,33 @@ class ConversationUpdate(BaseModel):
     model_id: Optional[str] = None
 
 
+class ConversationCreate(BaseModel):
+    title: str = ""
+    system_prompt: str = ""
+    model_id: Optional[str] = None
+
+
 @router.get("")
 def list_all() -> list[dict[str, Any]]:
     return conv_dao.list_conversations()
+
+
+@router.post("")
+def create_one(payload: Optional[ConversationCreate] = None) -> dict[str, Any]:
+    """빈 대화 생성 — PDF 첨부 등 채팅 외 진입점에서 사용."""
+    from app.llama import manager as llama_manager
+
+    p = payload or ConversationCreate()
+    model_id = p.model_id
+    if model_id is None:
+        st = llama_manager.get_state()
+        model_id = st.model_id  # None 가능
+    cid = conv_dao.create_conversation(
+        model_id=model_id,
+        system_prompt=p.system_prompt,
+        title=p.title,
+    )
+    return conv_dao.get_conversation(cid) or {"id": cid}
 
 
 @router.get("/{cid}")

@@ -21,6 +21,29 @@ export type AppConfig = {
   search_brave_api_key: string | null
   search_searxng_url: string | null
   search_max_results: number
+  embedding_sidecar_enabled: boolean
+  embedding_model_path: string | null
+  embedding_sidecar_port: number
+  embedding_sidecar_n_threads: number
+  embedding_sidecar_n_ctx: number
+  embedding_dim: number
+}
+
+export type DocumentStatus = 'indexing' | 'ready' | 'error'
+
+export type Document = {
+  id: string
+  conversation_id: string
+  name: string
+  mime: string | null
+  total_pages: number | null
+  total_chunks: number | null
+  size_bytes: number | null
+  embedding_model: string | null
+  status: DocumentStatus
+  error: string | null
+  indexed_at: number | null
+  created_at: number
 }
 
 export type ModelEntry = {
@@ -175,6 +198,13 @@ export const getLlamaLog = (maxBytes = 16384): Promise<{ log: string }> =>
 export const listConversations = (): Promise<Conversation[]> => request('/api/conversations')
 export const getConversation = (id: string): Promise<Conversation> =>
   request(`/api/conversations/${id}`)
+export const createConversation = (
+  patch?: { title?: string; system_prompt?: string; model_id?: string }
+): Promise<Conversation> =>
+  request('/api/conversations', {
+    method: 'POST',
+    body: JSON.stringify(patch ?? {})
+  })
 export const updateConversation = (
   id: string,
   patch: { title?: string; system_prompt?: string; model_id?: string }
@@ -186,6 +216,25 @@ export const listMessages = (id: string): Promise<StoredMessageDTO[]> =>
   request(`/api/conversations/${id}/messages`)
 export const generateTitle = (id: string): Promise<{ title: string }> =>
   request(`/api/conversations/${id}/generate-title`, { method: 'POST' })
+
+export const listDocuments = (cid: string): Promise<Document[]> =>
+  request(`/api/conversations/${cid}/documents`)
+export const deleteDocument = (cid: string, docId: string): Promise<{ ok: boolean }> =>
+  request(`/api/conversations/${cid}/documents/${docId}`, { method: 'DELETE' })
+
+export async function uploadDocument(cid: string, file: File): Promise<Document> {
+  const fd = new FormData()
+  fd.append('file', file)
+  const res = await fetch(`${BASE_URL}/api/conversations/${cid}/documents`, {
+    method: 'POST',
+    body: fd
+  })
+  if (!res.ok) {
+    const body = await res.text()
+    throw new Error(`HTTP ${res.status}: ${body}`)
+  }
+  return res.json() as Promise<Document>
+}
 
 export function streamChat(req: ChatStreamRequest, cb: StreamCallbacks): () => void {
   const ctrl = new AbortController()

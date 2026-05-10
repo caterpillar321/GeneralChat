@@ -102,6 +102,8 @@ class LlamaServer:
             cmd += ["--mmproj", mmproj_path]
             if not args.mmproj_offload_to_gpu:
                 cmd += ["--no-mmproj-offload"]
+        if args.embedding_mode:
+            cmd += ["--embeddings"]
         cmd += list(args.extra_args)
         return cmd
 
@@ -197,10 +199,11 @@ class LlamaServer:
         self._state = LlamaState(status="stopped")
 
 
-# === 두 인스턴스 ===
+# === 세 인스턴스 ===
 
 main = LlamaServer("main")
 title = LlamaServer("title")
+embedding = LlamaServer("embedding")
 
 
 # === 모듈 레벨 호환 함수 (기존 호출 보호) ===

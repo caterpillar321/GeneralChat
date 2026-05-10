@@ -31,3 +31,11 @@ class AppConfig(BaseModel):
     search_brave_api_key: str | None = None
     search_searxng_url: str | None = None
     search_max_results: int = 5
+
+    # 임베딩 사이드카 (RAG 용)
+    embedding_sidecar_enabled: bool = False
+    embedding_model_path: str | None = None
+    embedding_sidecar_port: int = 8083
+    embedding_sidecar_n_threads: int = 4
+    embedding_sidecar_n_ctx: int = 4096
+    embedding_dim: int = 1024  # Qwen3-Embedding-0.6B = 1024

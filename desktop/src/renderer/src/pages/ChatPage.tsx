@@ -1,13 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
+  createConversation,
   generateTitle,
   getConfig,
   listMessages,
   streamChat,
+  uploadDocument,
   type ChatMessage,
   type ChatTimings,
   type ChatUsage,
+  type Document,
   type ImageAttachment,
   type StoredMessageDTO,
   type ToolCallStored
@@ -15,6 +18,8 @@ import {
 import { useLlamaStatus } from '../hooks/useLlamaStatus'
 import MessageContent from '../components/MessageContent'
 import ToolCallCard from '../components/ToolCallCard'
+import DocumentsPanel, { isSupportedFile as isSupportedDoc } from '../components/DocumentsPanel'
+import AttachMenu from '../components/AttachMenu'
 
 const DEFAULT_SYSTEM = '당신은 간결하고 정확한 어시스턴트입니다.'
 
@@ -137,6 +142,9 @@ export default function ChatPage(): React.JSX.Element {
   const [pendingImages, setPendingImages] = useState<ImageAttachment[]>([])
   const [maxTokens, setMaxTokens] = useState(8192)
   const [useWebSearch, setUseWebSearch] = useState(false)
+  const [docsBumpKey, setDocsBumpKey] = useState(0)
+  const [docsCount, setDocsCount] = useState(0)
+  const [pdfUploading, setPdfUploading] = useState(false)
   const [streaming, setStreaming] = useState(false)
   const [streamContent, setStreamContent] = useState('')
   const [streamReasoning, setStreamReasoning] = useState('')
@@ -150,6 +158,8 @@ export default function ChatPage(): React.JSX.Element {
   const cancelRef = useRef<(() => void) | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const justNavigatedRef = useRef(false)
+  const imageInputRef = useRef<HTMLInputElement>(null)
+  const docInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (justNavigatedRef.current) {
@@ -237,7 +247,8 @@ export default function ChatPage(): React.JSX.Element {
     const text = input.trim()
     if ((!text && pendingImages.length === 0) || streaming) return
 
-    const isFirstTurn = messages.length === 0 && !convId
+    // PDF 자동 생성으로 convId 가 미리 박혔을 수 있으니 메시지 수만으로 판정
+    const isFirstTurn = messages.length === 0
     const userImages = pendingImages.length > 0 ? pendingImages : undefined
     const newMessages: StoredMessage[] = [
       ...messages,
@@ -373,6 +384,28 @@ export default function ChatPage(): React.JSX.Element {
     }
   }
 
+  const attachDocument = async (file: File): Promise<void> => {
+    setError(null)
+    setPdfUploading(true)
+    try {
+      let cid = convId
+      if (!cid) {
+        // 새 대화 자동 생성 후 그 id 사용
+        const conv = await createConversation({ system_prompt: systemPrompt })
+        cid = conv.id
+        setConvId(cid)
+        justNavigatedRef.current = true
+        navigate(`/chat/${cid}`, { replace: true })
+      }
+      await uploadDocument(cid, file)
+      setDocsBumpKey((k) => k + 1) // DocumentsPanel refresh
+    } catch (err) {
+      setError(`문서 업로드 실패 (${file.name}): ${String(err)}`)
+    } finally {
+      setPdfUploading(false)
+    }
+  }
+
   const newChat = (): void => {
     cancelRef.current?.()
     navigate('/chat')
@@ -422,6 +455,12 @@ export default function ChatPage(): React.JSX.Element {
           className="mt-2 w-full px-3 py-2 rounded border border-zinc-800 bg-zinc-900 text-sm resize-y"
         />
       </details>
+
+      <DocumentsPanel
+        key={docsBumpKey}
+        conversationId={convId}
+        onDocumentsChanged={(ds) => setDocsCount(ds.length)}
+      />
 
       <div ref={scrollRef} className="flex-1 overflow-y-auto px-6 py-6 space-y-4">
         {messages.length === 0 && !streamContent && !streamReasoning && streamToolCalls.length === 0 && (
@@ -479,7 +518,11 @@ export default function ChatPage(): React.JSX.Element {
           e.preventDefault()
           if (streaming) return
           for (const f of Array.from(e.dataTransfer.files)) {
-            if (f.type.startsWith('image/')) void attachFile(f)
+            if (f.type.startsWith('image/')) {
+              void attachFile(f)
+            } else if (isSupportedDoc(f)) {
+              void attachDocument(f)
+            }
           }
         }}
       >
@@ -509,58 +552,36 @@ export default function ChatPage(): React.JSX.Element {
           </div>
         )}
 
-        <div className="mb-2 flex items-center gap-2 flex-wrap">
-          <button
-            onClick={() => setUseWebSearch((v) => !v)}
-            disabled={streaming}
-            title="웹 검색 tool 활성화 — 모델이 필요할 때 호출"
-            className={`px-2 py-1 text-xs rounded border ${
-              useWebSearch
-                ? 'bg-sky-900/50 border-sky-700 text-sky-200'
-                : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200'
-            }`}
-          >
-            🌐 web tool {useWebSearch ? 'ON' : 'OFF'}
-          </button>
-          <label
-            className={`px-2 py-1 text-xs rounded border cursor-pointer ${
-              llama.is_vision
-                ? 'bg-zinc-900 border-zinc-800 text-zinc-300 hover:text-zinc-100'
-                : 'bg-zinc-950 border-zinc-900 text-zinc-600 cursor-not-allowed'
-            }`}
-            title={
-              llama.is_vision
-                ? '이미지 첨부 (드래그앤드롭도 가능)'
-                : '현재 모델은 vision 미지원 — Models에서 mmproj 있는 변형으로 로드'
+        {/* hidden file inputs (메뉴 → ref click) */}
+        <input
+          ref={imageInputRef}
+          type="file"
+          accept="image/*"
+          multiple
+          hidden
+          onChange={(e) => {
+            for (const f of Array.from(e.target.files ?? [])) {
+              if (f.type.startsWith('image/')) void attachFile(f)
             }
-          >
-            📎 image
-            <input
-              type="file"
-              accept="image/*"
-              multiple
-              hidden
-              disabled={streaming || !llama.is_vision}
-              onChange={(e) => {
-                for (const f of Array.from(e.target.files ?? [])) {
-                  if (f.type.startsWith('image/')) void attachFile(f)
-                }
-                e.target.value = ''
-              }}
-            />
-          </label>
-          {!llama.is_vision && pendingImages.length > 0 && (
-            <span className="text-[10px] text-rose-400">
-              ⚠ 비전 미지원 모델 — 첨부 무시됨
-            </span>
-          )}
-          {useWebSearch && (
-            <span className="text-[10px] text-zinc-500">
-              필요 시 web_search 호출 (max 5 round)
-            </span>
-          )}
-        </div>
-        <div className="flex gap-2">
+            e.target.value = ''
+          }}
+        />
+        <input
+          ref={docInputRef}
+          type="file"
+          accept=".pdf,.txt,.md,.markdown,.docx,.pptx,application/pdf,text/plain,text/markdown,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.presentationml.presentation"
+          multiple
+          hidden
+          onChange={(e) => {
+            for (const f of Array.from(e.target.files ?? [])) {
+              if (isSupportedDoc(f)) void attachDocument(f)
+            }
+            e.target.value = ''
+          }}
+        />
+
+        {/* 통합 입력 박스: textarea + 하단 toolbar */}
+        <div className="rounded-lg border border-zinc-800 bg-zinc-900 focus-within:border-zinc-600 transition-colors">
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -581,31 +602,94 @@ export default function ChatPage(): React.JSX.Element {
             rows={2}
             placeholder={
               llama.is_vision
-                ? '메시지 입력 (이미지는 드래그/붙여넣기/📎)'
+                ? '메시지 입력 (이미지는 드래그/붙여넣기/메뉴)'
                 : '메시지 입력 (Enter 전송, Shift+Enter 줄바꿈)'
             }
-            className="flex-1 px-3 py-2 rounded border border-zinc-800 bg-zinc-900 text-sm resize-none focus:outline-none focus:border-zinc-600"
+            className="w-full px-3 py-2 bg-transparent text-sm resize-none focus:outline-none disabled:opacity-50"
             disabled={streaming}
           />
-          {streaming ? (
-            <button
-              onClick={cancel}
-              className="px-5 self-stretch rounded bg-rose-700 hover:bg-rose-600 text-sm font-medium"
-            >
-              중지
-            </button>
-          ) : (
-            <button
-              onClick={send}
-              disabled={!input.trim() && pendingImages.length === 0}
-              className="px-5 self-stretch rounded bg-emerald-700 hover:bg-emerald-600 disabled:opacity-50 text-sm font-medium"
-            >
-              전송
-            </button>
-          )}
+          <div className="flex items-center justify-between gap-2 px-2 py-1.5 border-t border-zinc-800">
+            <div className="flex items-center gap-2 flex-wrap min-w-0">
+              <AttachMenu
+                disabled={streaming}
+                visionEnabled={llama.is_vision}
+                useWebSearch={useWebSearch}
+                onToggleWebSearch={() => setUseWebSearch((v) => !v)}
+                onPickImage={() => imageInputRef.current?.click()}
+                onPickDoc={() => docInputRef.current?.click()}
+              />
+              {pendingImages.length > 0 && (
+                <Chip color="zinc" title="첨부된 이미지">
+                  🖼 {pendingImages.length}
+                </Chip>
+              )}
+              {docsCount > 0 && (
+                <Chip color="emerald" title="이 대화의 자료 (search_documents tool 자동 활성)">
+                  📁 {docsCount}
+                </Chip>
+              )}
+              {useWebSearch && (
+                <Chip color="sky" title="모델이 필요시 web_search 호출">
+                  🌐 web
+                </Chip>
+              )}
+              {pdfUploading && (
+                <Chip color="amber" title="문서 업로드/인덱싱 중">
+                  📄 업로드 중…
+                </Chip>
+              )}
+              {!llama.is_vision && pendingImages.length > 0 && (
+                <Chip color="rose" title="현재 모델 vision 미지원">
+                  ⚠ vision 미지원
+                </Chip>
+              )}
+            </div>
+            {streaming ? (
+              <button
+                onClick={cancel}
+                className="px-4 py-1.5 rounded bg-rose-700 hover:bg-rose-600 text-sm font-medium shrink-0"
+              >
+                중지
+              </button>
+            ) : (
+              <button
+                onClick={send}
+                disabled={!input.trim() && pendingImages.length === 0}
+                className="px-4 py-1.5 rounded bg-emerald-700 hover:bg-emerald-600 disabled:opacity-50 text-sm font-medium shrink-0"
+              >
+                전송
+              </button>
+            )}
+          </div>
         </div>
       </footer>
     </div>
+  )
+}
+
+function Chip({
+  color,
+  title,
+  children
+}: {
+  color: 'zinc' | 'emerald' | 'sky' | 'amber' | 'rose'
+  title?: string
+  children: React.ReactNode
+}): React.JSX.Element {
+  const colorMap: Record<typeof color, string> = {
+    zinc: 'bg-zinc-800/60 border-zinc-700 text-zinc-300',
+    emerald: 'bg-emerald-900/40 border-emerald-800 text-emerald-200',
+    sky: 'bg-sky-900/40 border-sky-800 text-sky-200',
+    amber: 'bg-amber-900/40 border-amber-800 text-amber-200',
+    rose: 'bg-rose-900/40 border-rose-800 text-rose-200'
+  }
+  return (
+    <span
+      className={`px-2 py-0.5 text-[11px] rounded-full border ${colorMap[color]}`}
+      title={title}
+    >
+      {children}
+    </span>
   )
 }
 

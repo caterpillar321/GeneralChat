@@ -12,6 +12,8 @@ class LlamaStartArgs(BaseModel):
     flash_attn: bool = False
     # mmproj 를 GPU 에 offload? False = CPU 에서 실행 (VRAM 절약, 느림)
     mmproj_offload_to_gpu: bool = False
+    # 임베딩 모드 — --embeddings 플래그 추가, completion 비활성
+    embedding_mode: bool = False
     extra_args: list[str] = Field(default_factory=list)
 
 

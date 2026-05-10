@@ -7,24 +7,29 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api import (
     config_routes,
     conversations_routes,
+    documents_routes,
     health,
     llama_routes,
     models_routes,
     search_routes,
 )
 from app.chat import routes as chat_routes
+from app.config.store import load_config
 from app.db.connection import init_db
 from app.llama import manager as llama_manager
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
-    init_db()
+    cfg = load_config()
+    init_db(embedding_dim=cfg.embedding_dim)
     yield
     if llama_manager.is_running():
         await llama_manager.stop()
     if llama_manager.title.is_running():
         await llama_manager.title.stop()
+    if llama_manager.embedding.is_running():
+        await llama_manager.embedding.stop()
 
 
 app = FastAPI(title="GeneralChat Server", version="0.1.0", lifespan=lifespan)
@@ -45,3 +50,4 @@ app.include_router(llama_routes.router)
 app.include_router(chat_routes.router)
 app.include_router(conversations_routes.router)
 app.include_router(search_routes.router)
+app.include_router(documents_routes.router)
