@@ -2,6 +2,7 @@ import { NavLink, Outlet } from 'react-router-dom'
 import ConnectionStatus from './ConnectionStatus'
 import LlamaStatus from './LlamaStatus'
 import ConversationList from './ConversationList'
+import UpdatePrompt from './UpdatePrompt'
 
 export default function Layout(): React.JSX.Element {
   return (
@@ -21,6 +22,7 @@ export default function Layout(): React.JSX.Element {
         </nav>
 
         <div className="p-3 border-t border-zinc-800 space-y-3">
+          <UpdatePrompt />
           <LlamaStatus />
           <ConnectionStatus />
         </div>

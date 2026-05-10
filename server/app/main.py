@@ -13,6 +13,7 @@ from app.api import (
     llama_routes,
     models_routes,
     search_routes,
+    version_routes,
 )
 from app.chat import routes as chat_routes
 from app.config.store import load_config
@@ -53,3 +54,4 @@ app.include_router(conversations_routes.router)
 app.include_router(search_routes.router)
 app.include_router(documents_routes.router)
 app.include_router(downloads_routes.router)
+app.include_router(version_routes.router)
