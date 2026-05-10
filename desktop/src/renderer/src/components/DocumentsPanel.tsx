@@ -30,15 +30,25 @@ export default function DocumentsPanel({
   const refresh = useCallback(async (): Promise<void> => {
     if (!conversationId) {
       setDocs([])
+      setError(null)
       onDocumentsChanged?.([])
       return
     }
     try {
       const list = await listDocuments(conversationId)
       setDocs(list)
+      setError(null)
       onDocumentsChanged?.(list)
     } catch (e) {
-      setError(String(e))
+      const msg = String(e)
+      // conversation 삭제됐거나 stale URL — 패널 자체를 숨김 (ChatPage 가 redirect 처리)
+      if (msg.includes('404')) {
+        setDocs([])
+        setError(null)
+        onDocumentsChanged?.([])
+        return
+      }
+      setError(msg)
     }
   }, [conversationId, onDocumentsChanged])
 

@@ -6,6 +6,45 @@ import rehypeKatex from 'rehype-katex'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
 
+import type { Source } from '../lib/citations'
+import CitationBadge from './CitationBadge'
+
+const CITATION_RE = /\[(\d+)\]/g
+
+/** 텍스트 내 [N] 패턴을 CitationBadge 로 변환. 다른 React 노드는 그대로. */
+function transformWithCitations(
+  node: React.ReactNode,
+  sources: Source[],
+  keyPrefix = ''
+): React.ReactNode {
+  if (typeof node === 'string') {
+    if (!CITATION_RE.test(node)) return node
+    CITATION_RE.lastIndex = 0
+    const out: React.ReactNode[] = []
+    let last = 0
+    let m: RegExpExecArray | null
+    while ((m = CITATION_RE.exec(node)) !== null) {
+      if (m.index > last) out.push(node.slice(last, m.index))
+      const n = parseInt(m[1], 10)
+      const source = sources.find((s) => s.n === n)
+      out.push(
+        <CitationBadge key={`${keyPrefix}-${m.index}`} n={n} source={source} />
+      )
+      last = m.index + m[0].length
+    }
+    if (last < node.length) out.push(node.slice(last))
+    return out
+  }
+  if (Array.isArray(node)) {
+    return node.map((child, i) =>
+      typeof child === 'string'
+        ? transformWithCitations(child, sources, `${keyPrefix}-${i}`)
+        : child
+    )
+  }
+  return node
+}
+
 const components: Components = {
   h1: (p) => <h1 className="text-xl font-bold mt-3 mb-2" {...p} />,
   h2: (p) => <h2 className="text-lg font-bold mt-3 mb-2" {...p} />,
@@ -76,13 +115,42 @@ const components: Components = {
   }
 }
 
-function MessageContentImpl({ text }: { text: string }): React.JSX.Element {
+function MessageContentImpl({
+  text,
+  sources
+}: {
+  text: string
+  sources?: Source[]
+}): React.JSX.Element {
+  // sources 가 있으면 inline citation 변환을 추가한 components 사용
+  const finalComponents: Components = sources && sources.length > 0
+    ? {
+        ...components,
+        p: ({ children, ...p }) => (
+          <p className="my-2 leading-relaxed" {...p}>
+            {transformWithCitations(children, sources, 'p')}
+          </p>
+        ),
+        li: ({ children, ...p }) => (
+          <li className="my-0.5" {...p}>
+            {transformWithCitations(children, sources, 'li')}
+          </li>
+        ),
+        strong: ({ children, ...p }) => (
+          <strong {...p}>{transformWithCitations(children, sources, 'st')}</strong>
+        ),
+        em: ({ children, ...p }) => (
+          <em {...p}>{transformWithCitations(children, sources, 'em')}</em>
+        )
+      }
+    : components
+
   return (
     <div className="text-sm">
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkMath]}
         rehypePlugins={[rehypeKatex]}
-        components={components}
+        components={finalComponents}
       >
         {text}
       </ReactMarkdown>

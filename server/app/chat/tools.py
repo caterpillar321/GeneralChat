@@ -78,8 +78,9 @@ def _format_doc_results(rows: list[dict[str, Any]], query: str) -> str:
         if len(snippet) > 600:
             snippet = snippet[:600] + "…"
         page = r.get("page_num")
-        page_str = f"p.{page}" if page else ""
-        lines.append(f"\n[{i}] {r.get('document_name', '?')} {page_str}".rstrip())
+        page_str = f" · p.{page}" if page else ""
+        name = r.get("document_name", "?")
+        lines.append(f"\n**[{i}] `{name}`{page_str}**")
         lines.append(f"    {snippet}")
     lines.append(
         "\n위 발췌를 근거로 답하세요. 인용 시 [1], [2] 형식. 출처는 문서명·페이지 함께 표기."

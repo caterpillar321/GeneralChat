@@ -33,6 +33,7 @@ class TavilyProvider(SearchProvider):
                 url=item.get("url", ""),
                 content=item.get("content", "") or "",
                 score=item.get("score"),
+                published_date=item.get("published_date") or item.get("publishedDate"),
             )
             for item in data.get("results", [])
         ]

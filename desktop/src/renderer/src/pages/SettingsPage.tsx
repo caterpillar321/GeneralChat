@@ -277,6 +277,98 @@ export default function SettingsPage(): React.JSX.Element {
       </section>
 
       <section className="mb-8 rounded border border-zinc-800 p-4 bg-zinc-900/40">
+        <h3 className="text-sm font-medium mb-1">임베딩 사이드카 (RAG, CPU)</h3>
+        <p className="text-xs text-zinc-500 mb-3">
+          PDF/DOCX/PPTX 첨부 시 청크별 벡터 임베딩에 사용. 별도 작은 GGUF 모델을 CPU 로 띄움.
+          첫 호출 시 lazy spawn (~10-30초).
+        </p>
+
+        <label className="flex items-center gap-2 mb-3 text-sm">
+          <input
+            type="checkbox"
+            checked={cfg.embedding_sidecar_enabled}
+            onChange={(e) => update({ embedding_sidecar_enabled: e.target.checked })}
+          />
+          사이드카 사용 (RAG 활성화)
+        </label>
+
+        <label className="block text-xs text-zinc-400 mb-1">모델 경로 (.gguf)</label>
+        <input
+          type="text"
+          value={cfg.embedding_model_path ?? ''}
+          onChange={(e) =>
+            update({ embedding_model_path: e.target.value || null })
+          }
+          placeholder="/home/user/models/qwen3-embedding-0.6b/Qwen3-Embedding-0.6B-Q8_0.gguf"
+          className="w-full px-3 py-2 rounded border border-zinc-800 bg-zinc-950 text-xs font-mono focus:outline-none focus:border-zinc-600"
+          disabled={!cfg.embedding_sidecar_enabled}
+        />
+        <p className="text-[11px] text-zinc-600 mt-1">
+          추천: <code className="text-zinc-400">Qwen3-Embedding-0.6B Q8_0</code> (1024차원, 한국어 우세).
+          다운: <code className="text-zinc-400">hf download Qwen/Qwen3-Embedding-0.6B-GGUF --include &quot;Qwen3-Embedding-0.6B-Q8_0.gguf&quot; --local-dir ~/models/qwen3-embedding-0.6b</code>
+        </p>
+
+        <div className="grid grid-cols-4 gap-3 mt-3">
+          <div>
+            <label className="block text-xs text-zinc-400 mb-1">포트</label>
+            <input
+              type="number"
+              value={cfg.embedding_sidecar_port}
+              onChange={(e) =>
+                update({ embedding_sidecar_port: Number(e.target.value) || 8083 })
+              }
+              disabled={!cfg.embedding_sidecar_enabled}
+              className="w-full px-2 py-1.5 rounded border border-zinc-800 bg-zinc-950 text-xs"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-zinc-400 mb-1">CPU 스레드</label>
+            <input
+              type="number"
+              value={cfg.embedding_sidecar_n_threads}
+              min={1}
+              max={64}
+              onChange={(e) =>
+                update({ embedding_sidecar_n_threads: Number(e.target.value) || 4 })
+              }
+              disabled={!cfg.embedding_sidecar_enabled}
+              className="w-full px-2 py-1.5 rounded border border-zinc-800 bg-zinc-950 text-xs"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-zinc-400 mb-1">n_ctx</label>
+            <input
+              type="number"
+              value={cfg.embedding_sidecar_n_ctx}
+              min={512}
+              step={512}
+              onChange={(e) =>
+                update({ embedding_sidecar_n_ctx: Number(e.target.value) || 4096 })
+              }
+              disabled={!cfg.embedding_sidecar_enabled}
+              className="w-full px-2 py-1.5 rounded border border-zinc-800 bg-zinc-950 text-xs"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-zinc-400 mb-1">embedding 차원</label>
+            <input
+              type="number"
+              value={cfg.embedding_dim}
+              onChange={(e) =>
+                update({ embedding_dim: Number(e.target.value) || 1024 })
+              }
+              disabled={!cfg.embedding_sidecar_enabled}
+              className="w-full px-2 py-1.5 rounded border border-zinc-800 bg-zinc-950 text-xs"
+            />
+          </div>
+        </div>
+        <p className="text-[11px] text-zinc-600 mt-2">
+          ⚠ 차원 변경 시 chunks_vec 가상 테이블이 맞지 않으면 새 인덱싱이 실패합니다.
+          모델별 차원: Qwen3-Embedding-0.6B = 1024, bge-m3 = 1024, gte-multilingual-base = 768.
+        </p>
+      </section>
+
+      <section className="mb-8 rounded border border-zinc-800 p-4 bg-zinc-900/40">
         <h3 className="text-sm font-medium mb-1">Title 사이드카 (CPU)</h3>
         <p className="text-xs text-zinc-500 mb-3">
           작은 모델을 CPU로 별도 띄워 자동 제목 생성에 사용. 메인 모델 KV cache에 영향 0.

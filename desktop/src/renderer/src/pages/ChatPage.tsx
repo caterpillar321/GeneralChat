@@ -20,6 +20,7 @@ import MessageContent from '../components/MessageContent'
 import ToolCallCard from '../components/ToolCallCard'
 import DocumentsPanel, { isSupportedFile as isSupportedDoc } from '../components/DocumentsPanel'
 import AttachMenu from '../components/AttachMenu'
+import { parseSourcesFromToolCalls } from '../lib/citations'
 
 const DEFAULT_SYSTEM = '당신은 간결하고 정확한 어시스턴트입니다.'
 
@@ -187,10 +188,16 @@ export default function ChatPage(): React.JSX.Element {
         const lastWithUsage = [...list].reverse().find((m) => m.usage)
         if (lastWithUsage?.usage) setLastUsage(lastWithUsage.usage)
       } catch (e) {
-        setError(String(e))
+        const msg = String(e)
+        // 삭제된 대화의 URL에 머무르는 stale 상태 → 빈 채팅으로 redirect
+        if (msg.includes('404')) {
+          navigate('/chat', { replace: true })
+          return
+        }
+        setError(msg)
       }
     })()
-  }, [routeId])
+  }, [routeId, navigate])
 
   useEffect(() => {
     scrollRef.current?.scrollTo({
@@ -824,7 +831,10 @@ function Bubble({
         {content && (
           <div className="px-4 pt-1 pb-2.5">
             {role === 'assistant' ? (
-              <MessageContent text={content} />
+              <MessageContent
+                text={content}
+                sources={parseSourcesFromToolCalls(toolCalls)}
+              />
             ) : (
               <div className="whitespace-pre-wrap">{content}</div>
             )}

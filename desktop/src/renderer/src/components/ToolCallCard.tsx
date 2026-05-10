@@ -1,4 +1,5 @@
 import type { ToolCallStored } from '../lib/api'
+import MessageContent from './MessageContent'
 
 type Props = {
   tc: ToolCallStored
@@ -40,9 +41,13 @@ export default function ToolCallCard({ tc, running }: Props): React.JSX.Element 
         </div>
         <div>
           <div className="text-[10px] uppercase tracking-wider text-zinc-500 mb-1">result</div>
-          <pre className="text-[11px] text-zinc-400 whitespace-pre-wrap font-mono max-h-64 overflow-auto">
-            {tc.result || (running ? '(실행 중...)' : '(빈 결과)')}
-          </pre>
+          <div className="text-[12px] text-zinc-300 max-h-80 overflow-auto pr-1">
+            {tc.result ? (
+              <MessageContent text={tc.result} />
+            ) : (
+              <span className="text-zinc-500">{running ? '(실행 중...)' : '(빈 결과)'}</span>
+            )}
+          </div>
         </div>
       </div>
     </details>
