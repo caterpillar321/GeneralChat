@@ -1,0 +1,108 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Enable pnpm via corepack
+        run: |
+          corepack enable
+          corepack prepare pnpm@latest --activate
+        shell: bash
+
+      - name: Install uv (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+
+      - name: Install uv (Windows)
+        if: runner.os == 'Windows'
+        run: powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+
+      - name: Add uv to PATH (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          echo "$env:USERPROFILE\.local\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Install Python deps
+        working-directory: server
+        run: uv sync
+        shell: bash
+
+      - name: Build sidecar (PyInstaller)
+        working-directory: server
+        run: uv run pyinstaller generalchat-server.spec --clean --noconfirm
+        shell: bash
+
+      - name: Install Node deps
+        working-directory: desktop
+        run: pnpm install
+        shell: bash
+
+      - name: Build Electron
+        working-directory: desktop
+        run: pnpm build
+        shell: bash
+
+      - name: Package (Linux)
+        if: runner.os == 'Linux'
+        working-directory: desktop
+        run: ./node_modules/.bin/electron-builder --linux
+
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        working-directory: desktop
+        run: .\node_modules\.bin\electron-builder.cmd --win
+        shell: cmd
+
+      - name: Upload artifacts (Linux)
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: GeneralChat-linux
+          path: |
+            desktop/dist/*.AppImage
+            desktop/dist/*.deb
+
+      - name: Upload artifacts (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: GeneralChat-windows
+          path: |
+            desktop/dist/*.exe
+
+      - name: Release on tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            desktop/dist/*.AppImage
+            desktop/dist/*.deb
+            desktop/dist/*.exe
+          fail_on_unmatched_files: false

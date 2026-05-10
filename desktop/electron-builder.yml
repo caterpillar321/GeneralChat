@@ -1,7 +1,8 @@
-appId: com.electron.app
-productName: desktop
+appId: com.generalchat.app
+productName: GeneralChat
 directories:
   buildResources: build
+
 files:
   - '!**/.vscode/*'
   - '!src/*'
@@ -9,15 +10,33 @@ files:
   - '!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
   - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+
+# 패키징 시 사이드카 폴더를 resources/sidecar/ 로 복사
+extraResources:
+  - from: ../server/dist/generalchat-server
+    to: sidecar/generalchat-server
+    filter:
+      - "**/*"
+
 asarUnpack:
   - resources/**
+
 win:
-  executableName: desktop
+  executableName: GeneralChat
+  target:
+    - target: nsis
+      arch:
+        - x64
+
 nsis:
-  artifactName: ${name}-${version}-setup.${ext}
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  artifactName: ${productName}-${version}-setup.${ext}
   shortcutName: ${productName}
   uninstallDisplayName: ${productName}
   createDesktopShortcut: always
+
 mac:
   entitlementsInherit: build/entitlements.mac.plist
   extendInfo:
@@ -27,17 +46,17 @@ mac:
     - NSDownloadsFolderUsageDescription: Application requests access to the user's Downloads folder.
   notarize: false
 dmg:
-  artifactName: ${name}-${version}.${ext}
+  artifactName: ${productName}-${version}.${ext}
+
 linux:
   target:
     - AppImage
-    - snap
     - deb
-  maintainer: electronjs.org
+  maintainer: caterpillar321
   category: Utility
+  artifactName: ${productName}-${version}.${ext}
+
 appImage:
-  artifactName: ${name}-${version}.${ext}
+  artifactName: ${productName}-${version}.${ext}
+
 npmRebuild: false
-publish:
-  provider: generic
-  url: https://example.com/auto-updates

@@ -1,10 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import {
-  deleteDocument,
-  listDocuments,
-  uploadDocument,
-  type Document
-} from '../lib/api'
+import { deleteDocument, listDocuments, type Document } from '../lib/api'
 
 type Props = {
   conversationId: string | null
@@ -23,7 +18,6 @@ export default function DocumentsPanel({
   onDocumentsChanged
 }: Props): React.JSX.Element | null {
   const [docs, setDocs] = useState<Document[]>([])
-  const [uploading, setUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [expanded, setExpanded] = useState(true)
 
@@ -65,29 +59,6 @@ export default function DocumentsPanel({
     return () => clearInterval(id)
   }, [conversationId, docs, refresh])
 
-  const handleUpload = async (files: FileList | File[]): Promise<void> => {
-    if (!conversationId) {
-      setError('새 대화에서는 메시지 한 번 보낸 후 PDF 첨부 가능합니다.')
-      return
-    }
-    setError(null)
-    setUploading(true)
-    try {
-      for (const file of Array.from(files)) {
-        if (!isSupported(file)) {
-          setError(`지원 안 되는 파일: ${file.name}`)
-          continue
-        }
-        await uploadDocument(conversationId, file)
-      }
-      await refresh()
-    } catch (e) {
-      setError(String(e))
-    } finally {
-      setUploading(false)
-    }
-  }
-
   const handleDelete = async (doc: Document): Promise<void> => {
     if (!conversationId) return
     if (!confirm(`"${doc.name}" 삭제할까요?`)) return
@@ -111,7 +82,9 @@ export default function DocumentsPanel({
         <span className="flex items-center gap-2">
           {expanded ? '▾' : '▸'} 📁 이 대화의 자료 ({docs.length})
         </span>
-        {uploading && <span className="text-amber-400">업로드 중…</span>}
+        {docs.some((d) => d.status === 'indexing') && (
+          <span className="text-amber-400">indexing…</span>
+        )}
       </button>
       {expanded && (
         <div className="px-3 pb-2 space-y-1.5">

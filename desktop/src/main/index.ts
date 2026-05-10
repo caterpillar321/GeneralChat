@@ -4,18 +4,35 @@ import { spawn, ChildProcess } from 'child_process'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 
-// 사이드카 디렉토리: out/main/index.js → out/main → out → desktop → GeneralChat → server
-const SERVER_DIR = resolve(__dirname, '../../../server')
+// dev 모드 사이드카 디렉토리: out/main/index.js → out/main → out → desktop → GeneralChat → server
+const DEV_SERVER_DIR = resolve(__dirname, '../../../server')
 const SIDECAR_PORT = 8765
 
 let pythonProc: ChildProcess | null = null
 
-function startPythonSidecar(): void {
-  if (pythonProc) return
-  console.log(`[main] spawning Python sidecar at ${SERVER_DIR}`)
-  pythonProc = spawn(
-    'uv',
-    [
+interface SpawnConfig {
+  command: string
+  args: string[]
+  cwd: string
+}
+
+/** dev = uv run uvicorn, prod = 패키지 안의 PyInstaller 산출 사이드카 */
+function getSidecarSpawnConfig(): SpawnConfig {
+  if (app.isPackaged) {
+    // prod: process.resourcesPath/sidecar/generalchat-server/generalchat-server[.exe]
+    const exeName =
+      process.platform === 'win32' ? 'generalchat-server.exe' : 'generalchat-server'
+    const sidecarDir = join(process.resourcesPath, 'sidecar', 'generalchat-server')
+    return {
+      command: join(sidecarDir, exeName),
+      args: ['--port', String(SIDECAR_PORT), '--host', '127.0.0.1'],
+      cwd: sidecarDir
+    }
+  }
+  // dev: uv 명령 (호스트 PATH 의 uv)
+  return {
+    command: 'uv',
+    args: [
       'run',
       'uvicorn',
       'app.main:app',
@@ -27,12 +44,26 @@ function startPythonSidecar(): void {
       '--reload-dir',
       'app'
     ],
-    { cwd: SERVER_DIR, stdio: ['ignore', 'pipe', 'pipe'] }
-  )
+    cwd: DEV_SERVER_DIR
+  }
+}
+
+function startPythonSidecar(): void {
+  if (pythonProc) return
+  const cfg = getSidecarSpawnConfig()
+  console.log(`[main] spawning sidecar: ${cfg.command} (cwd=${cfg.cwd})`)
+  pythonProc = spawn(cfg.command, cfg.args, {
+    cwd: cfg.cwd,
+    stdio: ['ignore', 'pipe', 'pipe']
+  })
   pythonProc.stdout?.on('data', (d) => process.stdout.write(`[py] ${d}`))
   pythonProc.stderr?.on('data', (d) => process.stderr.write(`[py] ${d}`))
   pythonProc.on('exit', (code) => {
-    console.log(`[main] Python sidecar exited with ${code}`)
+    console.log(`[main] sidecar exited with ${code}`)
+    pythonProc = null
+  })
+  pythonProc.on('error', (err) => {
+    console.error(`[main] sidecar spawn error: ${err}`)
     pythonProc = null
   })
 }

@@ -3,11 +3,6 @@ import { listModels, rescanModels, type ModelEntry } from '../lib/api'
 import ModelLoadDialog from '../components/ModelLoadDialog'
 import { useLlamaStatus } from '../hooks/useLlamaStatus'
 
-function formatSize(bytes: number): string {
-  if (bytes < 1024 ** 3) return (bytes / 1024 ** 2).toFixed(0) + ' MB'
-  return (bytes / 1024 ** 3).toFixed(2) + ' GB'
-}
-
 export default function ModelsPage(): React.JSX.Element {
   const [models, setModels] = useState<ModelEntry[] | null>(null)
   const [loading, setLoading] = useState(true)

@@ -16,3 +16,8 @@ dependencies = [
     "sqlite-vec>=0.1.9",
     "uvicorn[standard]>=0.46.0",
 ]
+
+[dependency-groups]
+dev = [
+    "pyinstaller>=6.20.0",
+]

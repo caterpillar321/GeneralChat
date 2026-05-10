@@ -10,7 +10,6 @@ import {
   type ChatMessage,
   type ChatTimings,
   type ChatUsage,
-  type Document,
   type ImageAttachment,
   type StoredMessageDTO,
   type ToolCallStored
