@@ -29,6 +29,39 @@ export type AppConfig = {
   embedding_dim: number
 }
 
+export type DownloadKind = 'title' | 'embedding' | 'main'
+export type DownloadStatus = 'pending' | 'downloading' | 'done' | 'error' | 'cancelled'
+
+export type DownloadEntry = {
+  id: string
+  repo: string
+  filename: string
+  kind: DownloadKind
+  status: DownloadStatus
+  bytes_downloaded: number
+  bytes_total: number
+  error: string | null
+  local_path: string | null
+  started_at: number
+  updated_at: number
+}
+
+export const startDownload = (
+  repo: string,
+  filename: string,
+  kind: DownloadKind
+): Promise<DownloadEntry> =>
+  request('/api/downloads/start', {
+    method: 'POST',
+    body: JSON.stringify({ repo, filename, kind })
+  })
+
+export const getDownload = (id: string): Promise<DownloadEntry> =>
+  request(`/api/downloads/${id}`)
+
+export const cancelDownload = (id: string): Promise<{ ok: boolean }> =>
+  request(`/api/downloads/${id}`, { method: 'DELETE' })
+
 export type DocumentStatus = 'indexing' | 'ready' | 'error'
 
 export type Document = {

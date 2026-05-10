@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { getConfig, saveConfig, discoverDefaults, type AppConfig } from '../lib/api'
+import ModelPickerDialog, { type CatalogItem } from '../components/ModelPickerDialog'
 
 export default function SettingsPage(): React.JSX.Element {
   const [cfg, setCfg] = useState<AppConfig | null>(null)
@@ -8,6 +9,7 @@ export default function SettingsPage(): React.JSX.Element {
   const [saving, setSaving] = useState(false)
   const [savedAt, setSavedAt] = useState<Date | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [pickerKind, setPickerKind] = useState<'title' | 'embedding' | null>(null)
 
   useEffect(() => {
     getConfig().then(setCfg).catch((e) => setError(String(e)))
@@ -292,21 +294,25 @@ export default function SettingsPage(): React.JSX.Element {
           사이드카 사용 (RAG 활성화)
         </label>
 
-        <label className="block text-xs text-zinc-400 mb-1">모델 경로 (.gguf)</label>
+        <div className="flex items-center justify-between mb-1">
+          <label className="block text-xs text-zinc-400">모델 경로 (.gguf)</label>
+          <button
+            onClick={() => setPickerKind('embedding')}
+            className="text-[11px] text-emerald-400 hover:text-emerald-300"
+          >
+            📥 추천 모델 다운로드
+          </button>
+        </div>
         <input
           type="text"
           value={cfg.embedding_model_path ?? ''}
           onChange={(e) =>
             update({ embedding_model_path: e.target.value || null })
           }
-          placeholder="/home/user/models/qwen3-embedding-0.6b/Qwen3-Embedding-0.6B-Q8_0.gguf"
+          placeholder="(아직 미설정 — 우측 다운로드 버튼)"
           className="w-full px-3 py-2 rounded border border-zinc-800 bg-zinc-950 text-xs font-mono focus:outline-none focus:border-zinc-600"
           disabled={!cfg.embedding_sidecar_enabled}
         />
-        <p className="text-[11px] text-zinc-600 mt-1">
-          추천: <code className="text-zinc-400">Qwen3-Embedding-0.6B Q8_0</code> (1024차원, 한국어 우세).
-          다운: <code className="text-zinc-400">hf download Qwen/Qwen3-Embedding-0.6B-GGUF --include &quot;Qwen3-Embedding-0.6B-Q8_0.gguf&quot; --local-dir ~/models/qwen3-embedding-0.6b</code>
-        </p>
 
         <div className="grid grid-cols-4 gap-3 mt-3">
           <div>
@@ -384,20 +390,25 @@ export default function SettingsPage(): React.JSX.Element {
           사이드카 사용
         </label>
 
-        <label className="block text-xs text-zinc-400 mb-1">모델 경로 (.gguf)</label>
+        <div className="flex items-center justify-between mb-1">
+          <label className="block text-xs text-zinc-400">모델 경로 (.gguf)</label>
+          <button
+            onClick={() => setPickerKind('title')}
+            className="text-[11px] text-emerald-400 hover:text-emerald-300"
+          >
+            📥 추천 모델 다운로드
+          </button>
+        </div>
         <input
           type="text"
           value={cfg.title_sidecar_model_path ?? ''}
           onChange={(e) =>
             update({ title_sidecar_model_path: e.target.value || null })
           }
-          placeholder="/home/user/models/gemma-4-E2B-it-Q4_K_M.gguf"
+          placeholder="(아직 미설정 — 우측 다운로드 버튼)"
           className="w-full px-3 py-2 rounded border border-zinc-800 bg-zinc-950 text-xs font-mono focus:outline-none focus:border-zinc-600"
           disabled={!cfg.title_sidecar_enabled}
         />
-        <p className="text-[11px] text-zinc-600 mt-1">
-          추천: Gemma 4 E2B Q4_K_M, Llama 3.2 1B, Qwen 2.5 0.5B 등 작은 instruction 모델.
-        </p>
 
         <div className="grid grid-cols-3 gap-3 mt-3">
           <div>
@@ -457,6 +468,27 @@ export default function SettingsPage(): React.JSX.Element {
           </span>
         )}
       </div>
+
+      {pickerKind && (
+        <ModelPickerDialog
+          kind={pickerKind}
+          onClose={() => setPickerKind(null)}
+          onDone={(path: string, item: CatalogItem) => {
+            if (pickerKind === 'embedding') {
+              update({
+                embedding_sidecar_enabled: true,
+                embedding_model_path: path,
+                embedding_dim: item.dim ?? cfg.embedding_dim
+              })
+            } else {
+              update({
+                title_sidecar_enabled: true,
+                title_sidecar_model_path: path
+              })
+            }
+          }}
+        />
+      )}
     </div>
   )
 }

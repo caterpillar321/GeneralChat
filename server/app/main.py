@@ -8,6 +8,7 @@ from app.api import (
     config_routes,
     conversations_routes,
     documents_routes,
+    downloads_routes,
     health,
     llama_routes,
     models_routes,
@@ -51,3 +52,4 @@ app.include_router(chat_routes.router)
 app.include_router(conversations_routes.router)
 app.include_router(search_routes.router)
 app.include_router(documents_routes.router)
+app.include_router(downloads_routes.router)
