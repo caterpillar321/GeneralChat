@@ -8,6 +8,9 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: write   # release 생성에 필요
+
 jobs:
   build:
     strategy:
@@ -97,12 +100,23 @@ jobs:
           path: |
             desktop/dist/*.exe
 
-      - name: Release on tag
-        if: startsWith(github.ref, 'refs/tags/v')
+  # 두 빌드 끝난 뒤 한 번만 release 생성 (race 회피)
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+          path: dist
+
+      - name: Create release
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            desktop/dist/*.AppImage
-            desktop/dist/*.deb
-            desktop/dist/*.exe
+          files: dist/**
           fail_on_unmatched_files: false
+          generate_release_notes: true
