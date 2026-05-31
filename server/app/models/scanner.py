@@ -108,6 +108,43 @@ def can_be_vision(name: str) -> bool:
     return any(p.search(name) for p in _VISION_NAME_PATTERNS)
 
 
+# 모델 사이즈 라벨: 7B, 31B, E4B, E2B, 27B, 30B 등. mmproj↔모델 호환성 판정용.
+_SIZE_LABEL_RE = re.compile(r"(?<![a-z0-9])(e?\d+(?:\.\d+)?b)(?![a-z])", re.IGNORECASE)
+
+
+def _size_labels(name: str) -> set[str]:
+    return {m.lower() for m in _SIZE_LABEL_RE.findall(name)}
+
+
+def match_mmproj(model_name: str, directory: Path, mmproj_files: list["ModelFile"]):
+    """모델과 호환되는 mmproj 선택.
+
+    같은 폴더 후보 중에서:
+    - 사이즈 라벨(예: 31B / E4B)이 둘 다 명시됐는데 **다르면 제외** (mismatch 방지)
+    - 사이즈 라벨이 일치하면 강한 매치
+    - mmproj 에 사이즈 라벨 없으면 (generic mmproj-model-f16 등) 약한 후보로 fallback
+    """
+    candidates = [mp for mp in mmproj_files if Path(mp.path).parent == directory]
+    if not candidates:
+        return None
+
+    model_sizes = _size_labels(model_name)
+    scored: list[tuple[int, "ModelFile"]] = []
+    for mp in candidates:
+        mp_sizes = _size_labels(mp.name)
+        if mp_sizes and model_sizes:
+            if mp_sizes & model_sizes:
+                scored.append((2, mp))  # 사이즈 일치 — 강한 매치
+            # else: 사이즈 명시됐는데 불일치 → 후보에서 제외 (31B mmproj ↔ E4B 모델 방지)
+        else:
+            scored.append((1, mp))  # 사이즈 불명 generic mmproj → 약한 후보
+
+    if not scored:
+        return None
+    scored.sort(key=lambda x: -x[0])
+    return scored[0][1]
+
+
 def detect_family(name: str) -> str:
     for family, pat in FAMILY_PATTERNS:
         if pat.search(name):
@@ -186,16 +223,13 @@ def group_models(files: list[ModelFile]) -> list[ModelEntry]:
         first = group[0]
         directory = Path(first.path).parent
 
-        # 같은 폴더에 mmproj가 있으면 비전 모델로 매칭
-        matched_mmproj = next(
-            (mp for mp in mmproj_files if Path(mp.path).parent == directory),
-            None,
-        )
-
         clean_name = MULTIPART_RE.sub("", first.name)
         family = detect_family(clean_name)
         quant = detect_quant(clean_name)
         params = detect_params(clean_name)
+
+        # 호환되는 mmproj 만 매칭 (사이즈 라벨 비교 — 31B mmproj ↔ E4B 모델 방지)
+        matched_mmproj = match_mmproj(clean_name, directory, mmproj_files)
 
         entries.append(
             ModelEntry(
