@@ -10,6 +10,7 @@ stdout/stderr 는 인스턴스별 로그 파일로 리다이렉트.
 from __future__ import annotations
 
 import asyncio
+import re
 import subprocess
 from pathlib import Path
 from typing import Optional
@@ -24,6 +25,32 @@ HEALTH_TIMEOUT_SECONDS = 600.0  # 10분 — 큰 모델 로딩 여유
 
 LOG_DIR = Path(user_log_dir(APP_NAME))
 LOG_DIR.mkdir(parents=True, exist_ok=True)
+
+# 로딩 단계 시그널 (등장 순서) — 로그에 가장 마지막으로 보인 게 현재 phase
+_PHASE_SIGNALS: list[tuple[str, str]] = [
+    ("meta", "loaded meta data"),
+    ("tensors", "load_tensors:"),
+    ("context", "llama_context:"),
+    ("kv", "llama_kv_cache"),
+    ("mmproj", "clip_model_loader"),
+    ("warmup", "warming up the model"),
+]
+_LAYERS_RE = re.compile(r"offloaded\s+(\d+)\s*/\s*(\d+)\s+layers", re.IGNORECASE)
+
+
+def _derive_phase(log_text: str) -> tuple[str | None, int | None, int | None]:
+    """로그 텍스트에서 현재 로딩 단계 + 레이어 진행 추론."""
+    phase: str | None = None
+    for name, sig in _PHASE_SIGNALS:
+        if sig in log_text:
+            phase = name  # 더 나중 시그널이 이기도록 끝까지 순회
+    loaded = total = None
+    m = None
+    for m in _LAYERS_RE.finditer(log_text):
+        pass
+    if m:
+        loaded, total = int(m.group(1)), int(m.group(2))
+    return phase, loaded, total
 
 
 class LlamaServer:
@@ -48,6 +75,12 @@ class LlamaServer:
                     error="llama-server process exited unexpectedly (자세한 내용은 로그 참고)",
                 )
                 self._process = None
+        # 로딩 중이면 로그 tail 파싱해 phase 갱신
+        if self._state.status == "starting":
+            phase, loaded, total = _derive_phase(self.read_log(8192))
+            self._state.phase = phase
+            self._state.layers_loaded = loaded
+            self._state.layers_total = total
         return self._state.model_copy()
 
     def is_running(self) -> bool:
@@ -98,7 +131,7 @@ class LlamaServer:
         cmd += ["--cache-type-k", args.cache_type_k]
         cmd += ["--cache-type-v", args.cache_type_v]
         cmd += ["-fa", "on" if args.flash_attn else "off"]
-        if mmproj_path:
+        if mmproj_path and args.use_vision:
             cmd += ["--mmproj", mmproj_path]
             if not args.mmproj_offload_to_gpu:
                 cmd += ["--no-mmproj-offload"]
@@ -132,7 +165,7 @@ class LlamaServer:
                 model_path=model_path,
                 port=port,
                 n_ctx=args.n_ctx,
-                is_vision=mmproj_path is not None,
+                is_vision=mmproj_path is not None and args.use_vision,
             )
 
             try:

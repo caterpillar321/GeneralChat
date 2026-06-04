@@ -95,6 +95,15 @@ export type ModelEntry = {
 
 export type LlamaStatus = 'stopped' | 'starting' | 'running' | 'error'
 
+export type LlamaPhase =
+  | 'meta'
+  | 'tensors'
+  | 'context'
+  | 'kv'
+  | 'mmproj'
+  | 'warmup'
+  | null
+
 export type LlamaState = {
   status: LlamaStatus
   model_id: string | null
@@ -103,6 +112,9 @@ export type LlamaState = {
   pid: number | null
   n_ctx: number | null
   is_vision: boolean
+  phase: LlamaPhase
+  layers_loaded: number | null
+  layers_total: number | null
   error: string | null
 }
 
@@ -114,6 +126,7 @@ export type LlamaStartArgs = {
   cache_type_v: string
   flash_attn: boolean
   mmproj_offload_to_gpu: boolean
+  use_vision: boolean
   extra_args: string[]
 }
 

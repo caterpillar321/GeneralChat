@@ -6,6 +6,7 @@ import {
   startLlama,
   stopLlama,
   type LlamaStartArgs,
+  type LlamaState,
   type ModelEntry
 } from '../lib/api'
 import { useLlamaStatus } from '../hooks/useLlamaStatus'
@@ -62,6 +63,7 @@ export default function ModelLoadDialog({ model, onClose }: Props): React.JSX.El
     cache_type_v: 'f16',
     flash_attn: false,
     mmproj_offload_to_gpu: false,
+    use_vision: true,
     extra_args: []
   })
   const [ctxLoaded, setCtxLoaded] = useState(false)
@@ -83,6 +85,7 @@ export default function ModelLoadDialog({ model, onClose }: Props): React.JSX.El
   const [preset, setPreset] = useState<PresetKey>('safe')
   const [extraArgsText, setExtraArgsText] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [startedAt, setStartedAt] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [log, setLog] = useState('')
   const [showLog, setShowLog] = useState(false)
@@ -150,6 +153,7 @@ export default function ModelLoadDialog({ model, onClose }: Props): React.JSX.El
 
   const submit = async (): Promise<void> => {
     setSubmitting(true)
+    setStartedAt(Date.now())
     setError(null)
     setLog('')
     setShowLog(true)
@@ -270,18 +274,34 @@ export default function ModelLoadDialog({ model, onClose }: Props): React.JSX.El
         </label>
 
         {model.mmproj_file && (
-          <label className="flex items-center gap-2 mt-2 text-sm">
-            <input
-              type="checkbox"
-              checked={args.mmproj_offload_to_gpu}
-              onChange={(e) => update({ mmproj_offload_to_gpu: e.target.checked })}
-              disabled={isLoading}
-            />
-            mmproj GPU 오프로드
-            <span className="text-xs text-zinc-500">
-              — OFF면 CPU에서 실행 (VRAM 절약, 느림)
-            </span>
-          </label>
+          <>
+            <label className="flex items-center gap-2 mt-2 text-sm">
+              <input
+                type="checkbox"
+                checked={args.use_vision}
+                onChange={(e) => update({ use_vision: e.target.checked })}
+                disabled={isLoading}
+              />
+              vision 활성화 (mmproj 로드)
+              <span className="text-xs text-zinc-500">
+                — OFF면 텍스트 전용 (mmproj 깨졌거나 llama.cpp 미지원 시)
+              </span>
+            </label>
+            {args.use_vision && (
+              <label className="flex items-center gap-2 mt-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={args.mmproj_offload_to_gpu}
+                  onChange={(e) => update({ mmproj_offload_to_gpu: e.target.checked })}
+                  disabled={isLoading}
+                />
+                mmproj GPU 오프로드
+                <span className="text-xs text-zinc-500">
+                  — OFF면 CPU에서 실행 (VRAM 절약, 느림)
+                </span>
+              </label>
+            )}
+          </>
         )}
 
         {isAsymmetric && (
@@ -311,10 +331,7 @@ export default function ModelLoadDialog({ model, onClose }: Props): React.JSX.El
         )}
 
         {isLoading && (
-          <div className="mt-3 rounded border border-amber-700 bg-amber-950/40 p-2 text-xs text-amber-200">
-            로드 중… 큰 모델은 수 분 걸릴 수 있습니다 (타임아웃 10분). 상태:{' '}
-            <span className="font-medium">{status?.status ?? 'starting'}</span>
-          </div>
+          <LoadingStepper status={status} useVision={args.use_vision} startedAt={startedAt} />
         )}
 
         {(submitting || error || log) && (
@@ -378,5 +395,97 @@ function Field({
       <span className="block mb-1 text-zinc-400 text-xs">{label}</span>
       {children}
     </label>
+  )
+}
+
+type StepDef = { key: string; label: string; hint?: string }
+
+function LoadingStepper({
+  status,
+  useVision,
+  startedAt
+}: {
+  status: LlamaState | null
+  useVision: boolean
+  startedAt: number
+}): React.JSX.Element {
+  // 'init' = phase=null 구간 (프로세스 시작 + CUDA init + mmap), 보통 첫 빈 구간이 길다
+  const steps: StepDef[] = [
+    { key: 'init', label: '프로세스 시작 · CUDA 초기화', hint: '디스크·드라이버 준비' },
+    { key: 'meta', label: '모델 메타 읽기' },
+    { key: 'tensors', label: 'GPU 레이어 적재', hint: '가장 오래 — 가중치를 VRAM으로' },
+    { key: 'context', label: '컨텍스트 생성' },
+    { key: 'kv', label: 'KV 캐시 할당' },
+    ...(useVision
+      ? [{ key: 'mmproj', label: '비전 인코더 로드', hint: 'mmproj (BF16·CPU)' }]
+      : []),
+    { key: 'warmup', label: '워밍업' }
+  ]
+  const order = steps.map((s) => s.key)
+  // phase 가 null 이면 'init' 단계로 간주
+  const phase = status?.phase ?? null
+  const curIdx = phase ? order.indexOf(phase) : 0
+
+  const loaded = status?.layers_loaded ?? null
+  const total = status?.layers_total ?? null
+  const layerPct = loaded != null && total ? Math.floor((loaded / total) * 100) : null
+
+  const [elapsed, setElapsed] = useState(0)
+  useEffect(() => {
+    const id = setInterval(() => {
+      setElapsed(Math.floor((Date.now() - startedAt) / 1000))
+    }, 250)
+    return () => clearInterval(id)
+  }, [startedAt])
+
+  return (
+    <div className="mt-3 rounded border border-amber-700/60 bg-amber-950/30 p-3">
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-xs text-amber-200 font-medium">모델 로딩 중…</span>
+        <span className="text-[11px] text-zinc-500">
+          {elapsed}s 경과 · 타임아웃 600s
+        </span>
+      </div>
+      <div className="space-y-1">
+        {steps.map((s, i) => {
+          const done = curIdx > i
+          const active = curIdx === i
+          const icon = done ? '✓' : active ? '●' : '○'
+          const color = done
+            ? 'text-emerald-400'
+            : active
+              ? 'text-amber-300'
+              : 'text-zinc-600'
+          return (
+            <div key={s.key} className={`flex items-center gap-2 text-xs ${color}`}>
+              <span className="w-3 text-center shrink-0">
+                {active ? (
+                  <span className="inline-block w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+                ) : (
+                  icon
+                )}
+              </span>
+              <span className={active ? 'font-medium' : ''}>{s.label}</span>
+              {s.key === 'tensors' && (active || done) && layerPct != null && (
+                <span className="text-zinc-500">
+                  ({loaded}/{total})
+                </span>
+              )}
+              {active && s.hint && (
+                <span className="text-[10px] text-zinc-600">— {s.hint}</span>
+              )}
+            </div>
+          )
+        })}
+      </div>
+      {curIdx === order.indexOf('tensors') && layerPct != null && (
+        <div className="mt-2 h-1.5 rounded-full bg-zinc-800 overflow-hidden">
+          <div
+            className="h-full bg-amber-500 transition-all"
+            style={{ width: `${layerPct}%` }}
+          />
+        </div>
+      )}
+    </div>
   )
 }
