@@ -27,8 +27,9 @@ QUANT_RE = re.compile(
 # 멀티파트: -00001-of-00002
 MULTIPART_RE = re.compile(r"-(\d{5})-of-(\d{5})$", re.IGNORECASE)
 
-# mmproj 프로젝터
-MMPROJ_RE = re.compile(r"^mmproj[-_]", re.IGNORECASE)
+# mmproj 프로젝터 — 파일명 어디에 있든 'mmproj' 토큰이 있으면 보조 파일로 간주.
+# 예: mmproj-foo.gguf / foo-mmproj.gguf / foo.mmproj.gguf / mmproj_foo.gguf
+MMPROJ_RE = re.compile(r"(?:^|[-_.])mmproj(?:[-_.]|$)", re.IGNORECASE)
 
 # 파라미터 크기: 7B, 27B, 30B-A3B
 PARAMS_RE = re.compile(
@@ -174,7 +175,7 @@ def detect_multipart(stem: str) -> tuple[int, int] | None:
 
 
 def is_mmproj(name: str) -> bool:
-    return bool(MMPROJ_RE.match(name))
+    return bool(MMPROJ_RE.search(name))
 
 
 def scan_directory(root: Path) -> list[ModelFile]:
